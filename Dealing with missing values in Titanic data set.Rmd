@@ -1,0 +1,119 @@
+---
+title: "Dealing with missing values"
+author: "Saleem"
+date: "May 28, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this data set we wil primary deal with missing values. If the amount of missing data is not big relative to the size of the dataset then leaving the missing values might be the best strategy, however leaging the available data doesn't produce the best information and we need to look for fixes before leaving out the potential useful data points.
+
+This data set is from kaggle and is described in detail on webpage. Following is the description of data set.
+
+VARIABLE DESCRIPTIONS:
+survival        Survival
+                (0 = No; 1 = Yes)
+pclass          Passenger Class
+                (1 = 1st; 2 = 2nd; 3 = 3rd)
+name            Name
+sex             Sex
+age             Age
+sibsp           Number of Siblings/Spouses Aboard
+parch           Number of Parents/Children Aboard
+ticket          Ticket Number
+fare            Passenger Fare
+cabin           Cabin
+embarked        Port of Embarkation
+                (C = Cherbourg; Q = Queenstown; S = Southampton)
+
+Attaching libraries
+
+```{r}
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(readr)
+```
+0: Load the data in RStudio
+
+Save the data set as a CSV file called titanic_original.csv and load it in RStudio into a data frame
+                
+Read the data
+```{r}
+titanic_original <- read.csv("C:/Users/6430/Desktop/Project/titanic_original.csv", header = TRUE)
+
+df<-read.csv("C:/Users/6430/Desktop/Project/titanic_original.csv",na.strings=c("","na"))# we take care of the missing values right here.
+
+
+str(df)
+class(df)
+```
+1: Port of embarkation
+
+The embarked column has some missing values, which are known to correspond to passengers who actually embarked at Southampton. Find the missing values and replace them with S. (Caution: Sometimes a missing value might be read into R as a blank or empty string.)
+```{r}
+df[is.na(df$embarked),] #only the rows 169 and 285
+df1<-df
+df1$embarked <-lapply(df1$embarked, as.character)# Since embarked column is factor, it has to be converted into "character" first to input string.
+
+df1$embarked[which(is.na(df1$embarked))] <-"s"
+df2<-df1 
+df2[is.na(df2$embarked),] ## return  null i.e "na" values have been replaced by "s" as required.
+
+```
+ 
+2: Age
+
+You'll notice that a lot of the values in the Age column are missing. While there are many ways to fill these missing values, using the mean or median of the rest of the values is quite common in such cases.
+
+Calculate the mean of the Age column and use that value to populate the missing values
+
+Think about other ways you could have populated the missing values in the age column. Why would you pick any of those over the mean (or not)?
+
+
+```{r}
+df2[is.na(df2$age),]# quite many rows as suggested above
+
+df2$age[which(is.na(df2$age))] <- mean(df2$age,na.rm = TRUE)
+
+df2[is.na(df2$age),]# "na" values have been replaces by mean of rest of the values
+
+## I don't think mean age is the right way to go. Men and women have different life span and inputting the same mean value for each missing one can be quite misleading. 
+df3<-df2
+```
+
+3: Lifeboat
+
+You're interested in looking at the distribution of passengers in different lifeboats, but as we know, many passengers did not make it to a boat :-( This means that there are a lot of missing values in the boat column. Fill these empty slots with a dummy value e.g. the string 'None' or 'NA'
+
+This question was answered when we first loaded the data and "na" values were input 
+
+4: Cabin
+
+You notice that many passengers don't have a cabin number associated with them.
+
+    Does it make sense to fill missing cabin numbers with a value?
+
+    What does a missing value here mean?
+
+You have a hunch that the fact that the cabin number is missing might be a useful indicator of survival. Create a new column has_cabin_number which has 1 if there is a cabin number, and 0 otherwise.
+
+##Cabin are given depending on the class of tickets bought. If the cabins were near to lifeboats then people had easy and early access to them and therefore survival rate would have been better.
+##But since too much data is missing from cabin, it doesnt make sense to predict the cabin numbers based on too little data. 
+
+##Missing value perhaps means: People didn't have a specific cabin as tickets were cheap and many people stayed in a big lobby or room, that didn't have a speicifc number or the data is simply missing.
+
+```{r}
+df3$cabin <-lapply(df3$cabin, as.character)
+df3$has_cabin_number <- ifelse(df3$cabin == "NA", 0, 1)
+df4<-df3
+df4$has_cabin_number[which(is.na(df4$has_cabin_number))] <- 0
+str(df4)
+ 
+
+```
+
+
