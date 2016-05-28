@@ -1,0 +1,113 @@
+---
+title: "Basic Data Manipulation"
+author: "Saleem"
+date: "May 26, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this exercise, we are expected to clean up the data that can be analyzed. The data is small however suffers from many anamolies such as, field values are not same i.e spealling errors. Although small, it is a great problem for people learning R. Let's dive in.
+
+Loading the libaries
+
+```{r}
+library(readr)
+library(dplyr)
+library(tidyr)
+library(data.table)
+```
+
+Loading the data
+```{r}
+df <- read.csv("C:/Users/6430/Desktop/Project/refine_original.csv")
+class(df)
+
+df_working<-df
+```
+1: Clean up brand names
+
+Clean up the 'company' column, so all of the misspellings of the brand names are standardized. For example, you can transform the values in the column to be: philips, akzo, van houten and unilever (all lowercase).
+
+To achieve this we will use grepl command to search for the pattern letter and, once found, it will be replaced with our own desired word.
+
+The above result can also be achieved by replacing individual misspelled word by the correct one. But this process will be more tedius and can not be feasible with big files and many rows of data.
+
+```{r}
+df_working$company[grepl("p",df_working$company, ignore.case = TRUE)] <- "phillips"
+df_working$company[grepl("k",df_working$company, ignore.case = TRUE)] <- "akzo"
+df_working$company[grepl("t",df_working$company, ignore.case = TRUE)] <- "van houten"
+df_working$company[grepl("r",df_working$company, ignore.case = TRUE)] <- "unilever"
+
+```
+
+2: Separate product code and number
+
+Separate the product code and product number into separate columns i.e. add two new columns called product_code and product_number, containing the product code and number respectively
+
+```{r}
+df_working <- df_working %>% separate(`Product.code...number`, into = c("product_code", "product_number"), sep = "-")
+df_working
+```
+3: Add product categories
+
+You learn that the product codes actually represent the following product categories:
+
+    p = Smartphone
+
+    v = TV
+
+    x = Laptop
+
+    q = Tablet
+
+In order to make the data more readable, add a column with the product category for each record.
+
+```{r}
+Product_code_meaning <- c('p' = 'Smartphone', 'v' = 'TV', 'x' = 'Laptop', 'q' = 'Tablet')
+
+df_working$product_category<- factor(Product_code_meaning[df_working$product_code])
+
+df_working
+```
+
+
+4: Add full address for geocoding
+
+You'd like to view the customer information on a map. In order to do that, the addresses need to be in a form that can be easily geocoded. Create a new column full_address that concatenates the three address fields (address, city, country), separated by commas.
+
+```{r}
+df_working$full_address <- paste(df_working$address, df_working$city, df_working$country, sep = ', ')
+
+df_working
+
+```
+5: Create dummy variables for company and product category
+
+Both the company name and product category are categorical variables i.e. they take only a fixed set of values. In order to use them in further analysis you need to create dummy variables. Create dummy binary variables for each of them with the prefix company_ and product_ i.e.
+
+    Add four binary (1 or 0) columns for company: company_philips, company_akzo, company_van_houten and company_unilever
+
+    Add four binary (1 or 0) columns for product category: product_smartphone, product_tv, product_laptop and product_tablet
+
+
+```{r}
+df_working$company_phillips <- ifelse(df_working$company == "phillips", 1, 0)
+df_working$company_akzo <- ifelse(df_working$company == "akzo", 1, 0)
+df_working$company_van_houten <- ifelse(df_working$company == "van houten", 1, 0)
+df_working$company_unilever <- ifelse(df_working$company == "unilever", 1, 0)
+
+df_working$product_smartphone <- ifelse(df_working$product_category == "Smartphone", 1, 0)
+df_working$product_tv <- ifelse(df_working$product_category == "TV", 1, 0)
+df_working$product_laptop <- ifelse(df_working$product_category == "Laptop", 1, 0)
+df_working$product_tablet <- ifelse(df_working$product_category == "Tablet", 1, 0)
+
+df_working
+write.csv(df_working,'refine_clean.csv')
+
+```
+
+
+
