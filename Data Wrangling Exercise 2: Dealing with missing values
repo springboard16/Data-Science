@@ -1,0 +1,19 @@
+In this data set we wil primary deal with missing values. If the amount of missing data is not big relative to the size of the dataset then leaving the missing values might be the best strategy, however leaging the available data doesn't produce the best information and we need to look for fixes before leaving out the potential useful data points.
+
+This data set is from kaggle and is described in detail on webpage. Following is the description of data set.
+
+VARIABLE DESCRIPTIONS:
+survival        Survival
+                (0 = No; 1 = Yes)
+pclass          Passenger Class
+                (1 = 1st; 2 = 2nd; 3 = 3rd)
+name            Name
+sex             Sex
+age             Age
+sibsp           Number of Siblings/Spouses Aboard
+parch           Number of Parents/Children Aboard
+ticket          Ticket Number
+fare            Passenger Fare
+cabin           Cabin
+embarked        Port of Embarkation
+                (C = Cherbourg; Q = Queenstown; S = Southampton)
