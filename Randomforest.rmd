@@ -1,0 +1,127 @@
+---
+title: "Untitled"
+author: "Saleem"
+date: "June 6, 2016"
+output: html_document
+---
+
+A Random Forest is combination of classification and regression. The result from an ensemble model is usually better than the result from one of the individual models. In Random Forest, each decision tree is constructed by using a random subset of the training data that has predictors with known response. 
+
+In a decision tree, an input is entered at the top and as it traverses down the tree the data gets bucketed into smaller and smaller sets. The random forest takes the notion of decision trees to the next level by combining trees. Thus, in ensemble terms, the trees are weak learners and the random forest is a strong learner. 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Reading the libraries 
+```{r,echo=TRUE,message=F, warning=F}
+library(readr)
+library(randomForest)
+set.seed(415)
+```
+
+Reading the CSV files to be analyzed 
+
+```{r,echo=TRUE,message=F, warning=F}
+train <- read_csv("C:/Users/6430/Desktop/Project/train.csv/train.csv")
+test  <- read_csv("C:/Users/6430/Desktop/Project/test.csv/test.csv")
+store <- read_csv("C:/Users/6430/Desktop/Project/store.csv/store.csv")
+
+##merging the two files because two files have the different feature that have to be combined in order to the see the full effect of features on sales.
+train1 <- merge(train,store) 
+test1 <- merge(test,store)
+```
+
+
+Converting all the 'NA' in train data to Zeros. Store 622 has 11 missing values for the "open" column, in test data; so to predict correctly I have decided to input "1" for open column of store 622. Otherwise our prediction will not be correct.
+
+```{r}
+
+
+train1[is.na(train1)]   <- 0
+test1[is.na(test1)]   <- 1
+
+## We will only look at the stores that had status as "open"
+train1<- train1[ which(train1$Open=='1'),]
+```
+
+train1 and test1 data have "Date" as column value. We will seperate the Date into month, year and day respectively. These new variables generated through "Date" column will be better handle to predict the sales 
+
+```{r}
+
+train1$Date <- as.Date(train1$Date)
+test1$Date <- as.Date(test1$Date)
+
+train1$month <- as.integer(format(train1$Date, "%m"))
+train1$year <- as.integer(format(train1$Date, "%y"))
+train1$day <- as.integer(format(train1$Date, "%d"))
+train1$DayOfYear <- as.integer(as.POSIXlt(train1$Date)$yday)
+train1$week <- as.integer( format(train1$Date+3, "%U"))
+
+
+test1$month <- as.integer(format(test1$Date, "%m"))
+test1$year <- as.integer(format(test1$Date, "%y"))
+test1$day <- as.integer(format(test1$Date, "%d"))
+test1$DayOfYear <-  as.integer(as.POSIXlt(test1$Date)$yday)
+test1$week <- as.integer( format(test1$Date+3, "%U"))
+```
+
+
+```{r}
+
+names(train1)
+summary(train1)
+
+names(test1)
+summary(test1)
+
+```
+
+Features relevant to our analysis; Sales column is left as we are going to predict.
+
+```{r}
+variable.names <- names(train1)[c(1,2,6,7,8:12,14:23)]
+
+for (f in variable.names) {
+  if (class(train1[[f]])=="character") {
+    levels <- unique(c(train1[[f]], test1[[f]]))
+    train1[[f]] <- as.integer(factor(train1[[f]], levels=levels))
+    test1[[f]]  <- as.integer(factor(test1[[f]],  levels=levels))
+  }
+}
+```
+
+
+
+
+```{r}
+result <- randomForest(train1[,variable.names], 
+                    log(train1$Sales+1),
+                    mtry=5,
+                    ntree=50,
+                    max_depth = 30,
+                    sampsize=150000,
+                    do.trace=TRUE)
+                    
+importance(result, type = 1)   
+importance(result, type = 2)
+varImpPlot(result)                 
+pred <- exp(predict(result, test1)) -1
+submission <- data.frame(Id=test$Id, Sales=pred)
+write_csv(submission, "C:/Users/6430/Desktop/Project/resultfile.csv")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
