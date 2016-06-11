@@ -1,0 +1,271 @@
+---
+title: "Rossman Sales Prediction"
+author: "Saleem"
+date: "May 21, 2016"
+output: html_document
+---
+
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Reading the Libraries
+```{r,echo=TRUE,message=F, warning=F}
+library(data.table)
+library(ggplot2)
+library(dplyr)
+library(forecast)
+library(zoo)
+library(plotly)
+library(lubridate)
+library(reshape2)
+library(tseries)
+library(urca)
+library(randomForest)
+options(scipen=999)
+
+```
+Loading the data
+
+
+```{r,echo=TRUE,message=F, warning=F}
+
+test <-fread("C:/Users/6430/Desktop/Project/test.csv/test.csv")
+train<-fread("C:/Users/6430/Desktop/Project/train.csv/train.csv")
+Store<- fread("C:/Users/6430/Desktop/Project/store.csv/store.csv")
+```
+First look at the data
+
+```{r}
+str(train)
+str(test)
+str(Store)
+train[, Date := as.Date(Date)]
+test[, Date := as.Date(Date)]
+train <- train[order(Date)]
+test <- test[order(Date)]
+summary(train)
+summary(test)
+test[is.na(test$Open), ] # Only store 622
+test$Open[test$Store == 622]
+```
+The test set has 41088 rows of date while the train set has 1017209 rows. 
+Additonally store 622 has 11 missing values for the "open" column, so to predict correctly I have decided to input "1" for open column of store 622. Otherwise our prediction will not be correct.
+
+Further, the whole "Customers" column is not availab"le in test date but that will be 
+fixed by combining the two data set ("test" and "Store") at later stage.
+```{r}
+test[is.na(test)] <- 1 # Treating the closed store as open in test data
+```
+Also when we compare train and test data, we find all test stores are available in train data but 259 stores are not in test data
+```{r}
+sum(unique(test$Store) %in% unique(train$Store))
+sum(!(unique(train$Store) %in% unique(test$Store))) 
+table(train$StateHoliday) / nrow(train) # State holidays contribution in train data
+table(test$StateHoliday) / nrow(test) # This indicates that there is no Easter or Xmas holidays in test data
+table(train$SchoolHoliday) / nrow(train) # School holiday Contribution in train data
+
+table(test$SchoolHoliday) / nrow(test) # School holiday contribution in test data
+```
+
+Now let's examine the columns in train dataset that are most relevant for our EDA in train data. We will not include the stores with sales=0 as the stores is either closed or just didn't have any sale for some other reasons and includsion of those stores would be biased.
+
+```{r}
+hist(train$Sales, 40)
+
+hist(aggregate(train[Sales != 0]$Sales, 
+               by = list(train[Sales != 0]$Store), mean)$x, 75,
+     main = "Mean sales of each store when not closed")
+
+hist(train$Customers, 40)
+
+hist(aggregate(train[Sales != 0]$Customers, 
+               by = list(train[Sales != 0]$Store), mean)$x, 100,
+     main = "Mean customers/store when not closed")
+
+```
+
+
+Sales more than 20,000 looks to be outliers. We will check the data in ordet to make sure if the data really exhibit outliers or it is just the case for some stores.
+
+```{r}
+boxplot(train$Sales)
+```
+
+
+```{r}
+Store_outliers <- subset(train[train$Sales > 20000, ])
+Store_outliers
+```
+It is evident from the above data that high sales is just the case for few stores and it is also spread across the different dates i.e not particularly a case of outliers.
+
+
+As predicted sales and customers are quite positively related. Also it is obvious to think that Promo and Sales will be corelated as generally promo tend to atttract more customers and as a result customers tend to spend more. Let's support this through the correlation test available in R.
+
+
+```{r}
+tapply(train$Sales,train$DayOfWeek,mean)#Sale is highest on Sunday and Monday and almost even on other days
+```
+
+```{r}
+with(train[train$Sales != 0 & train$Promo == 0], mean(Sales / Customers))# No promotion
+with(train[train$Sales != 0 & train$Promo == 1], mean(Sales / Customers))# With Promotion
+```
+There are few Stores that were open but didn't have any sales. This could be due to tht fact that some customers just did window shopping, checked the deals or items and didn't buy anything.
+```{r}
+train[Open == 1 & Sales == 0]
+
+```
+
+
+**Feature Selection**
+Now let's see the effect of other paramaters on Sales such as StoreType, AssortmentType etc.
+ 
+We will merge the two dataset "train" and "Store" by the Store column.
+
+```{r}
+train_store <- merge(train, Store, by = "Store")
+ggplot(train_store[Sales != 0], aes(x = factor(PromoInterval), y = Sales)) + 
+  geom_jitter(alpha = 0.1) + 
+  geom_boxplot(color = "yellow", outlier.colour = NA, fill = NA)
+
+ggplot(train_store[Sales != 0], 
+       aes(x = as.Date(Date), y = Sales, color = factor(StoreType))) + 
+  geom_smooth(size = 2)
+```
+
+
+**Sales of all the stores over the given period**
+
+
+```{r}
+qplot(Date, Sales, data = train_store[Sales!=0],
+      geom = "smooth", span =0.5)+
+  scale_x_date(date_breaks="3 months", date_labels = "%m/%y")
+```
+
+
+Distribution of four different store types and sales pattern
+
+
+```{r}
+ggplot(train_store, aes(StoreType, fill= StoreType)) +geom_bar()+
+  ylab("Store count of total store") +
+  ggtitle("Distribution of avilable StoreTypes")
+
+```
+
+
+Distribution of available Assortment types and sales
+
+```{r}
+
+ggplot(train_store, aes(Assortment, fill= Assortment)) +
+ geom_bar()+xlab("AssortmentType")+ggtitle("Distribution of available AssortmentTypes")
+
+ggplot(train_store[Sales != 0], aes(x = Assortment , y = Sales, fill= Assortment)) + 
+ geom_boxplot() + scale_y_continuous(breaks = seq(0,100000,5000))+
+ggtitle("Boxplot showing the effect of Assortment Type on Sales")
+
+```
+
+Effect of Single day Promotion on Sales
+
+```{r}
+ ggplot(train_store, aes(x = Promo2 , y = Sales, color = factor (Promo2))) + 
+    
+    geom_boxplot() + scale_y_continuous(breaks = seq(0,100000,10000))+
+    scale_x_continuous(breaks = seq(0,1,1))+xlab("Promotion on/off")+
+    ylab("Sales of Stores")+
+    ggtitle("Boxplot of the effect of the promotion on sales")
+```
+
+Effect of Competition on Sales since Competition Started. Surprisingly competition staretd in year 1900.
+
+```{r}
+qplot(factor(CompetitionOpenSinceYear), Sales, data = train_store, 
+      fill = factor(CompetitionOpenSinceYear),geom = "boxplot")+
+  scale_y_continuous(breaks = seq(0,100000,5000))+xlab("Competition Year")
+```
+
+
+Sales Trend of any chosen store on open days
+
+```{r}
+  ggplot(train_store[Store == 256])+geom_line(aes(x= Date, y = Sales))+
+    scale_y_continuous(breaks = seq(0,100000,4000))+xlab("Timeline")+
+    ggtitle("Sales trend of a chosen store only for open days")
+
+```
+
+
+DayofWeek feature:
+
+```{r}
+  
+ggplot(train_store[Sales != 0], aes(x = weekdays(DayOfWeek), y = Sales, 
+  fill = factor(weekdays(DayOfWeek))))+ geom_boxplot()+
+  xlab("Sales distribution of each weekday")
+
+```
+Effect of StateHoliday on Sales
+
+```{r}
+  ggplot(train_store[Sales != 0], aes(x = StateHoliday, y = Sales)) + 
+    
+    geom_boxplot() + scale_y_continuous(breaks = seq(0,100000,5000))
+```
+
+Type B stores never closes even on Sunday, we will examine Type B stores sales data with time
+
+```{r}
+df<-train_store
+subdf=subset(df, StoreType=="b")
+subdf$Year <- format(subdf$Date, "%Y")
+subdf$Month <- format(subdf$Date, "%b")
+subdf$Day <- format(subdf$Date, "%d")
+train_store$Day<-format(train_store$Date, "%d")
+subdf$MonthDay <- format(subdf$Date, "%d-%b")
+subdf$CommonDate <- as.Date(paste0("2013-",format(subdf$Date, "%j")), "%Y-%j")
+qplot(x= Date, Sales, data = subdf, 
+      color = factor(Store),geom = "line")+
+scale_x_date(date_breaks="3 months", date_labels = "%m/%y")
+
+```
+
+
+Distribution of Promotion on each Day of Month
+
+
+```{r}
+ggplot(train_store, aes(x = Day, y=Promo,
+ fill = factor(Day)))+geom_bar(stat="identity")+
+  xlab("Days of month")+ylab("No of days on which promotion is offered")+
+  ggtitle("promotion distribution on the days of months")
+```
+
+Weekly Average Sales Distribution on Store 85
+
+```{r}
+qplot(Date, Sales, data = subdf[Store==85], geom ="line", col= as.factor(Year))+
+  scale_x_date(date_breaks="1 week", date_labels = "%W")+xlab("week of year")+
+  ggtitle("Average weekly sales of each year")
+```
+
+**Learnings from the above EDA**
+
+  * There is a strong positive correlation between number of customer and Sales as one can  
+  think
+  * Type B stores are never closed with possible exception of renovation.
+  * All type B stores have comparatively higher sales and mostly on weekends. That is also possible    as people like to shop during weekends.
+  * Stores also show higher sales day before holidays and right after holidays. This is also plausible as people tend to stock right before the holiday and rush once 
+   stores reopens after holidays.
+  * Assortment level 'b' is only offered at StoreType 'b'.
+
+
+
+
