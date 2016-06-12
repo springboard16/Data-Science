@@ -1,0 +1,165 @@
+---
+title: "Untitled"
+author: "Saleem"
+date: "June 8, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+**Gradient Boosted Model**
+
+A GBM is an ensemble of either regression or classification tree models. Both are forward-learning ensemble methods that obtain predictive results using gradually improved estimations. Boosting is a flexible nonlinear regression procedure that helps improve the accuracy of trees. Weak classification algorithms are sequentially applied to the incrementally changed data to create a series of decision trees, producing an ensemble of weak prediction models. While boosting trees increases their accuracy, it also decreases speed and user interpretability. The gradient boosting method generalizes tree boosting to minimize these drawbacks. For more information, see Gradient Boosted Models with H2O.
+
+**Strengths**
+
+ * Often best possible model
+ * Robust
+ * Overfits
+ * Sensitive to noise and extreme values
+ * Several hyper parameters
+ * Number of trees
+ * Maximum depth of tree
+
+** Key parameters for Gradient boost model**
+
+ * Adding trees will help. Default is 50.
+ * Increase the learning rate will also hlep. The contribution of each tree will be stronger and the   
+   model will move further away from the overall mean.
+ * Increase the depth will help.Adding depth makes each tree fit the data closer.
+
+**Reading libraries**
+```{r,echo=TRUE,message=F, warning=F}
+library(data.table)  
+library(h2o)
+library(plyr)
+library(readr)
+set.seed(415)
+```
+
+**Reading the files**
+
+```{r,echo=TRUE,message=F, warning=F}
+test <-fread("C:/Users/6430/Desktop/Project/test.csv/test.csv")
+train<-fread("C:/Users/6430/Desktop/Project/train.csv/train.csv")
+store<- fread("C:/Users/6430/Desktop/Project/store.csv/store.csv")
+
+##merging the two files because two files have the different feature that have to be combined in order to the see the full effect of features on sales.
+
+train1 <- merge(train,store,by="Store")
+test1 <- merge(test,store,by="Store")
+
+```
+
+Converting all the 'NA' in train data to Zeros. Store 622 has 11 missing values for the "open" column, in test data; so to predict correctly I have decided to input "1" for open column of store 622. Otherwise our prediction will not be correct.
+
+
+```{r}
+
+train1[is.na(train1)]   <- 0
+test1[is.na(test1)]   <- 1
+```
+
+train1 and test1 data have "Date" as column value. We will seperate the Date into month, year and day respectively. These new variables generated through "Date" column will be better handle to predict the sales 
+
+```{r}
+train1$Date <- as.Date(train1$Date)
+test1$Date <- as.Date(test1$Date)
+
+train1$month <- as.integer(format(train1$Date, "%m"))
+train1$year <- as.integer(format(train1$Date, "%y"))
+train1$day <- as.integer(format(train1$Date, "%d"))
+train1$DayOfYear <- as.integer(as.POSIXlt(train1$Date)$yday)
+train1$week <- as.integer( format(train1$Date+3, "%U"))
+
+
+test1$month <- as.integer(format(test1$Date, "%m"))
+test1$year <- as.integer(format(test1$Date, "%y"))
+test1$day <- as.integer(format(test1$Date, "%d"))
+test1$DayOfYear <-  as.integer(as.POSIXlt(test1$Date)$yday)
+test1$week <- as.integer( format(test1$Date+3, "%U"))
+
+```
+
+
+**H2O's random forest.Start cluster with all available threads**
+
+```{r}
+
+h2o.init(nthreads=-1,max_mem_size='8G')
+```
+
+Features relevant to our analysis; Sales column is left as we are going to predict.
+
+```{r}
+variable <- names(train1)[c(1,2,6,7,8:12,14:23)]
+
+```
+
+
+Log transformation to not be as sensitive to high sales
+
+```{r,echo=TRUE,message=F, warning=F}
+train1[,logSales:=log1p(Sales)]
+```
+
+Variables created to use all the features defined above as "variable.names "
+
+
+```{r}
+trainGbm<-as.h2o(train1)
+testGbm<-as.h2o(test1)
+```
+
+Training the model
+
+```{r}
+resultGbm <- h2o.gbm(x=variable,
+                   y="logSales",
+                   training_frame=trainGbm,
+                   model_id="introGBM",
+                   nbins_cats=1115,
+                   sample_rate = 0.5,
+                   col_sample_rate = 0.5,
+                   max_depth = 50,
+                   learn_rate=0.05,
+                   ntrees = 150
+                   )
+
+
+```
+
+Summary of the model and importance of variables                  
+    
+
+```{r}
+summary(resultGbm)
+variableimps = data.frame(h2o.varimp(resultGbm))
+
+
+```
+
+Get predictions out; predicts in H2O, as.data.frame gets them into R 
+
+```{r}
+predictions<-as.data.frame(h2o.predict(resultGbm,testGbm))
+```
+
+Return the predictions to the original scale of the Sales data
+
+
+```{r}
+pred <- expm1(predictions[,1])
+
+summary(pred)
+
+Finalfile <- data.frame(Id=test$Id, Sales=pred)
+
+write_csv(Finalfile,"C:/Users/6430/Desktop/Project/Salespredictionfinal.csv")
+```
+
+
+
+
